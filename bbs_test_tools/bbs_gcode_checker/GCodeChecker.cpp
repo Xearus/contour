@@ -46,6 +46,8 @@ GCodeCheckResult GCodeChecker::parse_file(const std::string& path)
 
     while (std::getline(file, line_raw)) {
         line_number++;
+        if (!line_raw.empty() && line_raw.back() == '\r')
+            line_raw.pop_back();
 
         const char *c = line_raw.c_str();
         c = skip_whitespaces(c);

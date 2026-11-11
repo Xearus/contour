@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/bambulab/BambuStudio",
+  "revision": "930fe93851afbc76b1c64dd37d8728b6a9afc89c",
+  "scope": "component-characterization",
+  "components": [
+    "src/clipper2",
+    "bbs_test_tools/bbs_gcode_checker"
+  ],
+  "source_patches": [
+    {
+      "path": "bbs_test_tools/bbs_gcode_checker/GCodeChecker.h",
+      "reason": "Include cstdint explicitly for standalone builds."
+    },
+    {
+      "path": "bbs_test_tools/bbs_gcode_checker/GCodeChecker.cpp",
+      "reason": "Normalize CRLF input so file validation is consistent across Windows and Unix."
+    }
+  ],
+  "full_slicing_pipeline_verified": false,
+  "printer_output_verified": false
+}

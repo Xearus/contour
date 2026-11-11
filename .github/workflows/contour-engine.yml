@@ -1,0 +1,94 @@
+name: Contour engine baseline
+
+on:
+  push:
+    paths:
+      - engine/**
+      - src/clipper2/**
+      - bbs_test_tools/bbs_gcode_checker/**
+      - tests/catch2/**
+      - .github/workflows/contour-engine.yml
+  pull_request:
+    paths:
+      - engine/**
+      - src/clipper2/**
+      - bbs_test_tools/bbs_gcode_checker/**
+      - tests/catch2/**
+      - .github/workflows/contour-engine.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure Unix
+        if: runner.os != 'Windows'
+        run: cmake -S engine -B build/contour -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S engine -B build/contour
+      - name: Build
+        run: cmake --build build/contour --config Debug --parallel 2
+      - name: Test
+        run: ctest --test-dir build/contour -C Debug --output-on-failure --output-junit results.xml
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: baseline-${{ matrix.os }}
+          path: build/contour/results.xml
+          if-no-files-found: ignore
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: cmake -S engine -B build/contour -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCONTOUR_ENABLE_SANITIZERS=ON
+      - run: cmake --build build/contour --parallel 2
+      - run: ctest --test-dir build/contour --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
+  checker-coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - run: cmake -S engine -B build/contour -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCONTOUR_ENABLE_COVERAGE=ON
+      - run: cmake --build build/contour --parallel 2
+      - run: ctest --test-dir build/contour --output-on-failure
+      - name: Report checker coverage, not whole-engine coverage
+        working-directory: build/contour
+        run: |
+          object_file=$(find CMakeFiles/contour_gcode_checker.dir -name GCodeChecker.cpp.gcda -print)
+          test -n "$object_file"
+          gcov --json-format --branch-probabilities "$object_file" > checker-coverage.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: checker-coverage
+          path: |
+            build/contour/checker-coverage.txt
+            build/contour/GCodeChecker.cpp.gcov.json.gz
+
+  arm64-emulated:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install cross-compiler and emulator
+        run: sudo apt-get update -qq && sudo apt-get install -y g++-aarch64-linux-gnu qemu-user
+      - run: cmake -S engine -B build/contour-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/engine/cmake/linux-aarch64.cmake
+      - run: cmake --build build/contour-arm64 --parallel 2
+      - run: ctest --test-dir build/contour-arm64 --output-on-failure --output-junit results.xml
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: baseline-arm64-emulated
+          path: build/contour-arm64/results.xml
+          if-no-files-found: ignore

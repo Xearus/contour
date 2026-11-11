@@ -1,6 +1,7 @@
 ﻿#ifndef _GCodeChecker_H_
 #define _GCodeChecker_H_
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>

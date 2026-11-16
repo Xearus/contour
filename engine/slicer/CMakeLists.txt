@@ -61,6 +61,12 @@ add_executable(contour-slice main.cpp)
 target_link_libraries(contour-slice PRIVATE libslic3r)
 
 if(BUILD_TESTING)
+    # Expose missing initialization instead of relying on zeroed stack pages.
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-ftrivial-auto-var-init=pattern" CONTOUR_HAS_PATTERN_INIT)
+    if(CONTOUR_HAS_PATTERN_INIT)
+        target_compile_options(contour-slice PRIVATE -ftrivial-auto-var-init=pattern)
+    endif()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME contour.model-to-gcode
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline.py"

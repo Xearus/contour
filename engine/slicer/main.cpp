@@ -41,6 +41,7 @@ int main(int argc, char **argv)
             object->ensure_on_bed();
         }
         Slic3r::Print print;
+        print.set_plate_origin(Slic3r::Vec3d::Zero());
         print.set_status_silent();
         print.apply(model, config);
         const auto error = print.validate();

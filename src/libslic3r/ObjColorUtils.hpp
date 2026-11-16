@@ -4,7 +4,12 @@
 #include <algorithm>
 #include <map>
 
+#ifdef CONTOUR_HEADLESS
+#include "opencv2/core.hpp"
+#include "opencv2/imgproc.hpp"
+#else
 #include "opencv2/opencv.hpp"
+#endif
 #include "libslic3r/Color.hpp"
 
 namespace Slic3r {

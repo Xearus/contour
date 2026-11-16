@@ -1,0 +1,58 @@
+name: Contour model-to-G-code
+
+on:
+  push:
+    paths:
+      - engine/**
+      - src/**
+      - cmake/**
+      - version.inc
+      - .github/workflows/contour-slicer.yml
+  pull_request:
+    paths:
+      - engine/**
+      - src/**
+      - cmake/**
+      - version.inc
+      - .github/workflows/contour-slicer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build isolated dependencies
+        run: docker build --quiet -f engine/slicer/Containerfile -t contour-slicer-dev .
+      - name: Build and exercise STL-to-G-code without network access
+        run: |
+          mkdir -p build/contour-slicer
+          docker run --rm --network none \
+            -v "$PWD:/src:ro" -v "$PWD/build/contour-slicer:/build" \
+            contour-slicer-dev sh -c \
+            'cmake -S /src/engine -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+               -DCMAKE_CXX_FLAGS_RELEASE="-O1 -DNDEBUG" \
+               -DCONTOUR_BUILD_SLICER=ON > /build/configure.log 2>&1 &&
+             cmake --build /build --parallel 2 > /build/build.log 2>&1 &&
+             ldd /build/slicer/contour-slice > /build/runtime-libraries.txt &&
+             ! grep -Ei "libwx|libcurl" /build/runtime-libraries.txt &&
+             ctest --test-dir /build --output-on-failure --output-junit results.xml'
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: slicing-${{ matrix.os }}
+          path: |
+            build/contour-slicer/configure.log
+            build/contour-slicer/build.log
+            build/contour-slicer/results.xml
+            build/contour-slicer/runtime-libraries.txt
+            build/contour-slicer/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore

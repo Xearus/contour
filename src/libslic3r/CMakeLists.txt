@@ -3,8 +3,12 @@ project(libslic3r)
 
 include(PrecompiledHeader)
 
-string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
-set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+if(CONTOUR_BUILD_SLICER)
+    set(SLIC3R_BUILD_TIME "experimental")
+else()
+    string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
+    set(SLIC3R_BUILD_TIME ${COMPILE_TIME})
+endif()
 
 if("${BBL_RELEASE_TO_PUBLIC}" STREQUAL "0")
 execute_process(
@@ -531,6 +535,11 @@ if (APPLE)
             Format/ModelIO.mm
         )
 endif ()
+
+if(CONTOUR_BUILD_SLICER)
+    include("${CONTOUR_UPSTREAM_DIR}/engine/slicer/library.cmake")
+    return()
+endif()
 
 add_library(libslic3r STATIC ${lisbslic3r_sources}
     "${CMAKE_CURRENT_BINARY_DIR}/libslic3r_version.h"

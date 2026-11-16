@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+option(CONTOUR_BUILD_SLICER "Build the experimental model-to-G-code pipeline" OFF)
 option(CONTOUR_ENABLE_SANITIZERS "Instrument baseline components with ASan and UBSan" OFF)
 option(CONTOUR_ENABLE_COVERAGE "Instrument baseline components for gcov" OFF)
 
@@ -40,6 +41,10 @@ target_link_libraries(contour_gcode_checker PRIVATE contour_instrumentation)
 
 add_executable(contour-check-gcode "${CONTOUR_CHECKER_DIR}/main.cpp")
 target_link_libraries(contour-check-gcode PRIVATE contour_gcode_checker contour_instrumentation)
+
+if(CONTOUR_BUILD_SLICER)
+    add_subdirectory(slicer)
+endif()
 
 if(BUILD_TESTING)
     add_executable(contour_engine_tests

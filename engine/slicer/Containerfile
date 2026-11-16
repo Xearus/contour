@@ -1,0 +1,15 @@
+FROM docker.io/library/ubuntu:24.04
+
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential cmake ninja-build python3 \
+        libboost-system-dev libboost-filesystem-dev libboost-thread-dev \
+        libboost-log-dev libboost-locale-dev libboost-regex-dev libboost-iostreams-dev \
+        libeigen3-dev libtbb-dev libcgal-dev libcereal-dev libnlopt-cxx-dev \
+        libexpat1-dev libpng-dev libssl-dev libnoise-dev libopencv-core-dev \
+        libopencv-imgproc-dev libopencv-imgcodecs-dev \
+        libassimp-dev libocct-data-exchange-dev libocct-visualization-dev \
+        libfreetype-dev libfontconfig-dev nlohmann-json3-dev && \
+    apt-get clean
+
+WORKDIR /src

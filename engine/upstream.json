@@ -1,10 +1,12 @@
 {
   "repository": "https://github.com/bambulab/BambuStudio",
   "revision": "930fe93851afbc76b1c64dd37d8728b6a9afc89c",
-  "scope": "component-characterization",
+  "scope": "component-characterization-and-headless-fff-isolation",
+  "mesh_boolean_backend": "upstream MCUT fallback; OpenMeshCraft is not packaged",
   "components": [
     "src/clipper2",
-    "bbs_test_tools/bbs_gcode_checker"
+    "bbs_test_tools/bbs_gcode_checker",
+    "src/libslic3r (upstream source manifest, excluding resin-only processing and desktop log sink)"
   ],
   "source_patches": [
     {
@@ -14,8 +16,25 @@
     {
       "path": "bbs_test_tools/bbs_gcode_checker/GCodeChecker.cpp",
       "reason": "Normalize CRLF input so file validation is consistent across Windows and Unix."
+    },
+    {
+      "path": "src/libslic3r/CMakeLists.txt",
+      "reason": "Opt into the Contour headless library recipe, reuse the upstream source manifest, and avoid timestamp-driven rebuilds."
+    },
+    {
+      "path": "src/libslic3r/Log.cpp",
+      "reason": "Use local plaintext logging instead of the desktop encrypted sink and its HTTP dependency in headless builds."
+    },
+    {
+      "path": "src/libslic3r/ObjColorUtils.hpp",
+      "reason": "Include only the OpenCV modules actually used for headless color processing instead of requiring its GUI and other unrelated modules."
+    },
+    {
+      "path": "src/slic3r/Utils/ColorSpaceConvert.cpp",
+      "reason": "Build upstream color calculations without the unrelated wxColour conversion helpers in headless mode."
     }
   ],
   "full_slicing_pipeline_verified": false,
+  "model_to_gcode_contract_scope": "synthetic STL boxes, layer-height overrides and CLI error handling; not full slicing correctness",
   "printer_output_verified": false
 }

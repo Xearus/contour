@@ -16,11 +16,17 @@
 #endif
 
 #include "Log.hpp"
+#ifndef CONTOUR_HEADLESS
 #include "LogSink.hpp"
+#endif
 #include "Desensitize.hpp"
 
 #include <atomic>
 #include <exception>
+#ifdef CONTOUR_HEADLESS
+#include <filesystem>
+#include <stdexcept>
+#endif
 #include <iomanip>
 #include <string>
 #include <string_view>
@@ -119,8 +125,13 @@ static struct RunOnInit {
 } g_RunOnInit;
 
 namespace {
+#ifdef CONTOUR_HEADLESS
+using LogSink = boost::log::sinks::synchronous_sink<boost::log::sinks::text_file_backend>;
+#endif
 boost::shared_ptr<LogSink> g_log_sink;
+#ifndef CONTOUR_HEADLESS
 boost::shared_ptr<LogSinkBackend> g_log_sink_backend;
+#endif
 // Folder given to set_log_path_and_level; later files go to the same place.
 std::string g_log_dir;
 } // namespace
@@ -138,6 +149,15 @@ namespace attrs = boost::log::attributes;
 void set_log_path_and_level(const std::string& log_dir, unsigned int level, const LogEncOptions& enc_options)
 {
     g_log_dir = log_dir;
+#ifdef CONTOUR_HEADLESS
+    if (enc_options.enc_type != LogEncOptions::LOG_ENC_NONE)
+        throw std::invalid_argument("Encrypted desktop logging is unavailable in the headless engine.");
+    if (!log_dir.empty())
+        std::filesystem::create_directories(log_dir);
+    g_log_sink = logging::add_file_log(
+        keywords::file_name = (std::filesystem::path(log_dir) / "contour_%N.log").string(),
+        keywords::auto_flush = true);
+#else
     // Also creates the log folder, so it runs before the early return below.
     const std::string file = LogSinkUtil::get_log_filename_format(g_log_dir, enc_options);
     g_log_sink_backend     = boost::make_shared<LogSinkBackend>(file, enc_options);
@@ -151,6 +171,7 @@ void set_log_path_and_level(const std::string& log_dir, unsigned int level, cons
 		<< expr::smessage
 	);
 	boost::log::core::get()->add_sink(g_log_sink);
+#endif
 
 	logging::add_common_attributes();
 
@@ -160,10 +181,15 @@ void set_log_path_and_level(const std::string& log_dir, unsigned int level, cons
 
 void update_log_sink(const LogEncOptions& enc_options)
 {
+#ifndef CONTOUR_HEADLESS
     if (g_log_sink_backend) {
         const std::string file = LogSinkUtil::get_log_filename_format(g_log_dir, enc_options);
         g_log_sink_backend->update_enc_option(file, enc_options);
     }
+#else
+    if (enc_options.enc_type != LogEncOptions::LOG_ENC_NONE)
+        throw std::invalid_argument("Encrypted desktop logging is unavailable in the headless engine.");
+#endif
 }
 
 std::string current_exception_message()
@@ -273,8 +299,10 @@ std::string kv_failed(std::string_view key) noexcept
 bool log_enabled(LogLevel level)
 {
     // A record made while this thread is writing another one would deadlock on the sink's locks.
+#ifndef CONTOUR_HEADLESS
     if (LogSinkBackend::is_consuming_on_this_thread())
         return false;
+#endif
     return static_cast<boost::log::trivial::severity_level>(level) >= logSeverity.load(std::memory_order_relaxed);
 }
 

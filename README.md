@@ -4,16 +4,18 @@ Contour is an engine-first fork of Bambu Studio. The goal is a portable,
 headless slicing backend with a Rust API, independently tested before adding
 desktop, mobile, or server frontends.
 
-**Current scope: component characterization, not a standalone slicer.** The
-build below exercises the upstream Clipper2 polygon library and Bambu's
-standalone G-code checker without wxWidgets, OpenGL, printer networking, or a
-display. It does not yet load models, run the complete slicing pipeline, or
-produce printer-ready packages. There is no Rust API yet.
+**Current scope: component characterization and experimental FFF isolation.**
+The default lightweight build exercises Clipper2 and Bambu's standalone G-code
+checker. An opt-in `contour-slice` target connects STL loading to the upstream
+FFF pipeline and raw G-code export, without building the desktop application or
+printer transport. It is not a printer-ready slicer. There is no Rust API yet.
 
 The upstream baseline is recorded in [`engine/upstream.json`](engine/upstream.json).
 Slicing algorithms and printer profiles remain unchanged. Initial upstream
 source patches supply a missing standard header in the G-code checker and
 normalize CRLF input so validation is consistent across operating systems.
+The experimental build also separates network-backed desktop logging from the
+slicing library; it supports local, unencrypted file logging only.
 
 ## Building the characterization baseline
 
@@ -44,7 +46,54 @@ command. This uses QEMU directly and needs no privileged container or host
 On GCC/Clang, `-DCONTOUR_ENABLE_SANITIZERS=ON` enables address and undefined
 behaviour sanitizers. GCC builds can instead use
 `-DCONTOUR_ENABLE_COVERAGE=ON` for gcov instrumentation. These options apply only
-to the components in this build, not the entire Bambu slicing engine.
+to enabled Contour targets. Checker coverage is not whole-engine coverage.
+
+## Experimental model-to-G-code build
+
+The initial dependency recipe targets Linux. It retains upstream geometry,
+CAD-import and texture-processing dependencies rather than replacing algorithms
+or pretending the complete library has already been slimmed down. Resin-only
+processing and the network-backed desktop log sink are excluded. No desktop
+application, rendering loop or proprietary printer-network plugin is built.
+Mesh booleans use upstream's MCUT fallback, not its default OpenMeshCraft
+backend; equivalence between those backends has not been established.
+
+From the repository root:
+
+```sh
+podman build -f engine/slicer/Containerfile -t contour-slicer-dev .
+mkdir -p build/contour-slicer
+podman run --rm --network none \
+  -v "$PWD:/src:ro" -v "$PWD/build/contour-slicer:/build" \
+  contour-slicer-dev sh -c \
+  'cmake -S /src/engine -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_CXX_FLAGS_RELEASE="-O1 -DNDEBUG" \
+     -DCONTOUR_BUILD_SLICER=ON &&
+   cmake --build /build --parallel 2 &&
+   ctest --test-dir /build --output-on-failure'
+```
+
+The executable accepts
+`contour-slice INPUT.stl OUTPUT.gcode [CONFIG.ini]`. Existing output paths are
+rejected. The optional INI file overrides upstream configuration keys, for
+example:
+
+```ini
+layer_height = 0.1
+initial_layer_print_height = 0.1
+```
+
+The default configuration is a generic, single-filament Marlin experiment, not
+an X2D profile. Models retain their XY coordinates and are placed on the bed in
+Z. Output is raw G-code, not a Bambu printer-ready package: **do not send these
+experiments to a printer**. Printer profiles, machine start/end sequences,
+multi-material compatibility, Rust bindings and Android remain separate work.
+
+The pipeline contract tests generate synthetic STL boxes, exercise the actual
+CLI without a display, and independently inspect layer heights, finite motion
+and positive extrusion. They also exercise configuration changes and failures
+that must not produce or overwrite an output file. This is initial end-to-end
+evidence, not comprehensive slicing correctness or printer-safety certification.
 
 ## What the tests establish
 
@@ -58,8 +107,11 @@ to the components in this build, not the entire Bambu slicing engine.
 
 CI is configured for Linux x86-64/ARM64, Windows, macOS, sanitizers, and ARM64
 Linux execution under QEMU, with a separate gcov artifact for the checker.
+These jobs cover the lightweight baseline. Model-to-G-code CI runs separately
+on native Linux x86-64 and ARM64; Windows, macOS and Android slicing are not yet
+verified.
 A configured job is not evidence that it passed.
-Full model-to-G-code regressions, X2D output verification, and physical print
+Broad model-to-G-code regressions, X2D output verification, and physical print
 validation are still required before describing Contour as a usable slicer.
 
 The inherited project and applicable Contour changes are licensed under

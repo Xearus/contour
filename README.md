@@ -8,7 +8,8 @@ desktop, mobile, or server frontends.
 The default lightweight build exercises Clipper2 and Bambu's standalone G-code
 checker. An opt-in `contour-slice` target connects STL loading to the upstream
 FFF pipeline and raw G-code export, without building the desktop application or
-printer transport. It is not a printer-ready slicer. There is no Rust API yet.
+printer transport. A narrow C library and safe Rust wrapper expose that same
+operation without upstream C++ types. It is not a printer-ready slicer.
 
 The upstream baseline is recorded in [`engine/upstream.json`](engine/upstream.json).
 Slicing algorithms and printer profiles remain unchanged. Initial upstream
@@ -87,13 +88,56 @@ The default configuration is a generic, single-filament Marlin experiment, not
 an X2D profile. Models retain their XY coordinates and are placed on the bed in
 Z. Output is raw G-code, not a Bambu printer-ready package: **do not send these
 experiments to a printer**. Printer profiles, machine start/end sequences,
-multi-material compatibility, Rust bindings and Android remain separate work.
+multi-material compatibility and Android remain separate work.
 
 The pipeline contract tests generate synthetic STL boxes, exercise the actual
-CLI without a display, and independently inspect layer heights, finite motion
-and positive extrusion. They also exercise configuration changes and failures
+CLI and repeated direct C calls without a display, and independently inspect
+layer heights, finite motion and positive extrusion. The Rust example runs
+through the same contracts. They also exercise configuration changes and failures
 that must not produce or overwrite an output file. This is initial end-to-end
 evidence, not comprehensive slicing correctness or printer-safety certification.
+
+## Experimental Rust API
+
+The slicing build also produces `libcontour_engine` and the C-compatible header
+[`contour/engine.h`](engine/slicer/include/contour/engine.h). The CLI calls this
+same boundary. Exceptions become status codes and bounded, caller-owned error
+messages; no C++ objects or allocator ownership cross the boundary. Calls are
+blocking and serialized because upstream process-global state is not yet
+verified for concurrent slices. The API is experimental, not a frozen ABI.
+
+The dependency-free crate in [`rust/contour-engine`](rust/contour-engine) links
+the prebuilt shared library rather than rebuilding the C++ engine through Cargo:
+
+```rust
+contour_engine::slice_stl("model.stl", "output.gcode", None)?;
+```
+
+In the dependency container, after the CMake build above:
+
+```sh
+export CONTOUR_ENGINE_LIB_DIR=/build/slicer
+export LD_LIBRARY_PATH=/build/slicer
+export CARGO_TARGET_DIR=/build/rust-target
+cargo test --manifest-path /src/rust/contour-engine/Cargo.toml --offline --locked
+cargo build --manifest-path /src/rust/contour-engine/Cargo.toml \
+  --offline --locked --example slice
+python3 /src/engine/slicer/test_pipeline.py /build/rust-target/debug/examples/slice
+```
+
+The container includes Rust 1.75+ build, formatting and lint tools. Outside it,
+use the corresponding absolute build paths and ensure the native library and
+its runtime dependencies can be found by the platform loader. Native builds
+remain Linux-first; adding a Rust API does not establish Windows, macOS or
+Android slicing support. Unix paths retain native bytes; other platforms
+currently require UTF-8 paths, and Windows narrow-path handling remains unverified.
+
+Existing-output rejection is not atomic, and late export failures may leave
+partial files. This is not a multi-tenant server API. C++ exceptions are caught,
+but native crashes are not isolated; process isolation is still required for
+untrusted models. Configuration remains upstream INI rather than a portable
+backend-neutral settings schema. No preview, cancellation, progress reporting,
+printer transport or X2D output support is added by these bindings.
 
 ## What the tests establish
 
@@ -108,7 +152,8 @@ evidence, not comprehensive slicing correctness or printer-safety certification.
 CI is configured for Linux x86-64/ARM64, Windows, macOS, sanitizers, and ARM64
 Linux execution under QEMU, with a separate gcov artifact for the checker.
 These jobs cover the lightweight baseline. Model-to-G-code CI runs separately
-on native Linux x86-64 and ARM64; Windows, macOS and Android slicing are not yet
+on native Linux x86-64 and ARM64, including the same output contracts through
+the Rust example; Windows, macOS and Android slicing are not yet
 verified.
 A configured job is not evidence that it passed.
 Broad model-to-G-code regressions, X2D output verification, and physical print

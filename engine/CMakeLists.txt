@@ -10,6 +10,10 @@ option(CONTOUR_BUILD_SLICER "Build the experimental model-to-G-code pipeline" OF
 option(CONTOUR_ENABLE_SANITIZERS "Instrument baseline components with ASan and UBSan" OFF)
 option(CONTOUR_ENABLE_COVERAGE "Instrument baseline components for gcov" OFF)
 
+if(CONTOUR_BUILD_SLICER)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 if(CONTOUR_ENABLE_SANITIZERS AND CONTOUR_ENABLE_COVERAGE)
     message(FATAL_ERROR "Use separate build directories for sanitizers and coverage.")
 endif()

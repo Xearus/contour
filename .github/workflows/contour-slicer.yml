@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - engine/**
+      - rust/**
       - src/**
       - cmake/**
       - version.inc
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - engine/**
+      - rust/**
       - src/**
       - cmake/**
       - version.inc
@@ -44,7 +46,17 @@ jobs:
              cmake --build /build --parallel 2 > /build/build.log 2>&1 &&
              ldd /build/slicer/contour-slice > /build/runtime-libraries.txt &&
              ! grep -Ei "libwx|libcurl" /build/runtime-libraries.txt &&
-             ctest --test-dir /build --output-on-failure --output-junit results.xml'
+             ctest --test-dir /build --output-on-failure --output-junit results.xml &&
+             export CONTOUR_ENGINE_LIB_DIR=/build/slicer &&
+             export LD_LIBRARY_PATH=/build/slicer &&
+             export CARGO_TARGET_DIR=/build/rust-target &&
+             cargo fmt --manifest-path /src/rust/contour-engine/Cargo.toml -- --check &&
+             cargo clippy --manifest-path /src/rust/contour-engine/Cargo.toml \
+               --offline --locked --all-targets -- -D warnings &&
+             cargo test --manifest-path /src/rust/contour-engine/Cargo.toml --offline --locked &&
+             cargo build --manifest-path /src/rust/contour-engine/Cargo.toml \
+               --offline --locked --example slice &&
+             python3 /src/engine/slicer/test_pipeline.py /build/rust-target/debug/examples/slice'
       - uses: actions/upload-artifact@v6
         if: always()
         with:

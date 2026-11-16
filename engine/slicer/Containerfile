@@ -2,7 +2,7 @@ FROM docker.io/library/ubuntu:24.04
 
 RUN apt-get update -qq && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build python3 \
+        build-essential cmake ninja-build python3 cargo rustfmt rust-clippy \
         libboost-system-dev libboost-filesystem-dev libboost-thread-dev \
         libboost-log-dev libboost-locale-dev libboost-regex-dev libboost-iostreams-dev \
         libeigen3-dev libtbb-dev libcgal-dev libcereal-dev libnlopt-cxx-dev \

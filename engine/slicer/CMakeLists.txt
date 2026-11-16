@@ -57,19 +57,42 @@ foreach(dependency build-utils admesh boost clipper miniz glu-libtess qhull semv
 endforeach()
 add_subdirectory("${LIBDIR}/libslic3r" upstream/libslic3r)
 
+add_library(contour_engine SHARED api.cpp)
+target_include_directories(contour_engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_definitions(contour_engine PRIVATE CONTOUR_ENGINE_BUILD)
+target_link_libraries(contour_engine PRIVATE libslic3r)
+set_target_properties(contour_engine PROPERTIES
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES
+    VERSION 0.1.0 SOVERSION 0)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(contour_engine PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
+
 add_executable(contour-slice main.cpp)
-target_link_libraries(contour-slice PRIVATE libslic3r)
+target_link_libraries(contour-slice PRIVATE contour_engine)
 
 if(BUILD_TESTING)
     # Expose missing initialization instead of relying on zeroed stack pages.
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-ftrivial-auto-var-init=pattern" CONTOUR_HAS_PATTERN_INIT)
     if(CONTOUR_HAS_PATTERN_INIT)
-        target_compile_options(contour-slice PRIVATE -ftrivial-auto-var-init=pattern)
+        target_compile_options(contour_engine PRIVATE -ftrivial-auto-var-init=pattern)
     endif()
+    add_executable(contour_api_tests test_api.c)
+    target_link_libraries(contour_api_tests PRIVATE contour_engine)
+    add_test(NAME contour.c-api COMMAND contour_api_tests
+        "${CMAKE_CURRENT_BINARY_DIR}/missing-c-api-model.stl"
+        "${CMAKE_CURRENT_BINARY_DIR}/unused-c-api-output.gcode")
+    set_tests_properties(contour.c-api PROPERTIES TIMEOUT 60 LABELS "pipeline;api")
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME contour.model-to-gcode
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline.py"
             "$<TARGET_FILE:contour-slice>")
     set_tests_properties(contour.model-to-gcode PROPERTIES TIMEOUT 180 LABELS "pipeline")
+    add_test(NAME contour.library-model-to-gcode
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_pipeline.py"
+            --library "$<TARGET_FILE:contour_engine>")
+    set_tests_properties(contour.library-model-to-gcode PROPERTIES
+        TIMEOUT 180 LABELS "pipeline;api"
+        ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY=")
 endif()

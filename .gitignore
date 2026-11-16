@@ -1,6 +1,7 @@
 Build
 Build.bat
 /build/
+/rust/contour-engine/target/
 /build2022/
 deps/build
 MYMETA.json

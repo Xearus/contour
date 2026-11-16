@@ -1,3 +1,4 @@
+import ctypes
 import math
 import os
 from pathlib import Path
@@ -8,7 +9,18 @@ import tempfile
 import unittest
 
 
+USE_LIBRARY = sys.argv[1] == "--library"
+if USE_LIBRARY:
+    sys.argv.pop(1)
 SLICER = Path(sys.argv.pop(1)).resolve()
+if USE_LIBRARY:
+    LIBRARY = ctypes.CDLL(str(SLICER))
+    NATIVE_SLICE = LIBRARY.contour_slice_stl
+    NATIVE_SLICE.argtypes = [
+        ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_char), ctypes.c_size_t,
+    ]
+    NATIVE_SLICE.restype = ctypes.c_int
 
 
 def write_box(path, width=10, height=2):
@@ -46,6 +58,17 @@ class PipelineTests(unittest.TestCase):
             profile = self.directory / "profile.ini"
             profile.write_text(config, encoding="ascii")
             arguments.append(str(profile))
+        if USE_LIBRARY:
+            diagnostic = ctypes.create_string_buffer(b"stale diagnostic", 4096)
+            status = NATIVE_SLICE(
+                os.fsencode(self.model), os.fsencode(self.output),
+                os.fsencode(profile) if config is not None else None,
+                diagnostic, len(diagnostic))
+            if status == 0:
+                self.assertEqual(diagnostic.value, b"")
+            return subprocess.CompletedProcess(
+                arguments, 0 if status == 0 else 1, "",
+                diagnostic.value.decode("utf-8", errors="replace"))
         environment = os.environ.copy()
         environment.pop("DISPLAY", None)
         environment.pop("WAYLAND_DISPLAY", None)
